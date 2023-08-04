@@ -3,15 +3,16 @@
 #include <ctype.h>
 #include <string.h>	//strlen() (getStringLength), strdup() (duplicateString)
 
+#define DEBUG 0	//Change to 1 to enable debugging. Keep 0 to reduce the amount of debug printing.
 #define ERR_LENGTH 2
 #define ERR_NON_DIGIT 3
 
-//ADDS TWO LARGE-VALUED BASE10 NUMBERS
+//ADDS TWO POSITIVE (including zero) LARGE-VALUED BASE10 NUMBERS
 
 
 //PREREQUISITE KNOWLEDGE:
 //LSD = Least Significant Digit, MSD = Most Significant Digit, sumPlaceholder = Result of adding together both MSDs,
-//  addend = # to add to another # (i.e., input #, not the resultant #)
+//  addend = # to add to another # (i.e., input #, not the resultant #). E.g. with 4+6=10, both 4 and 6 are addends.
 //Mutable = Modifiable/Changeable, Immutable = Static and unchanging (after its value has been initially set)
 //char, short, int, long, float, double, bool are all ways of storing bits. Some just use more bits to store the same #.
 //  (char)255 = 1111 1111, but (int)255 = 00000000 00000000 00000000 11111111. (these two #s assume only positive values can be represented, making the MSD always positive)
@@ -21,6 +22,7 @@
 //strdup() allocates memory but does NOT free it. When used, strdup() should either be free()d or only be used when creating known-length arrays at compile-time
 //  I.e., Don't do `char* ary2 = strdup(ary);` without using free(),
 //    but `char ary2[501] = strdup(ary);` should be fine (if ary has 500 or fewer elements and ary is NULL-terminated) without doing `free(ary2)`
+//strlen() adds 1 to a counter for every nonNULL character. Once a NULL character is hit, the counter's value is NOT incremented, and the counter's value is returned.
 
 
 
@@ -85,11 +87,13 @@ void print_decimalRepresented_CharArrayWithoutLeadingZeroes(char* ary, int aryLe
 }
 
 
-//Shift every array element left (one index closer to index 0, truncating/overwriting the element at index 0)
-//USES AND MODIFIES THE PASSED-IN ARRAY TO SAVE MEMORY. DOES NOT ALLOCATE EXTRA ARRAY THAT WOULD NEED TO BE FREED.
-//NEVERMIND, IMMUTABILITY TRUMPS MEMORY USAGE NOWADAYS, SO I WON'T MODIFY THE PASSED-IN ARRAY.
+//Purpose:  Shift every array element left (one index closer to index 0, truncating/overwriting the element at index 0).
+//2) USES AND MODIFIES THE PASSED-IN ARRAY TO SAVE MEMORY. DOES NOT ALLOCATE EXTRA ARRAY THAT WOULD NEED TO BE FREED.
+//     NEVERMIND, IMMUTABILITY TRUMPS MEMORY USAGE NOWADAYS, SO I WON'T MODIFY THE PASSED-IN ARRAY.
+//3) DIGIT-represented array CANNOT be passed in because 0==NULL, terminating a string.
+//     Passed-in array MUST be char-represented (i.e., have '0' instead of 0).
 //{1,2,3,4,5,6,7,8,9,10} -> newlyAllocatedArray{2,3,4,5,6,7,8,9,10,0}
-const char* removeMSDfromCharArray_aryShiftLeft(char* ary, const int originalAryLen)
+const char* removeMSDfromCharArray_aryShiftLeft(char* nonDigitAry, const int originalAryLen)
 {
 	//  Goes element by element. Inefficient.
 	//for(int i=1; i<aryLen; i++)
@@ -97,15 +101,16 @@ const char* removeMSDfromCharArray_aryShiftLeft(char* ary, const int originalAry
 
 	//  Best for saving memory, but not security due to mutability.
 	//I can't guarantee that the last element will always end up 0, but it always ended up to be 0 in my tests (using memcpy() alone). Idk why.
-	//memcpy(destinationArray,sourceAry,lengthToCopyFromSrcToDest)
+	//memcpy(pointerToStartOfDestinationArray, pointerToStartOfSourceAry, lengthToCopyFromSrcToDest)
 	//Start at memory location (ary+1), copy everything from that location to (ary+1)+aryLen INTO starting memory location (ary)
 	//memcpy(ary, ary+1, aryLen);	//Utilizes transferring entire blocks of memory at a time instead of going individually, # by #
 
 	//Relying on the last char being NULL after using `ary={}`, I will use string duplication (shouldn't be used on regular arrays, only strings)
 	char copiedAry[originalAryLen] = {};	//Creates locally-scoped-and-compile-time-created array that gets deallocated after this function ends.
-	//Above array is filled with NULLs (thanks to ={};)
-	memcpy(copiedAry, ary+1, originalAryLen);
-	return strdup(copiedAry);	//Can't simply return copiedAry because its pointer is invalid after this function finishes execution
+	//Above array is filled with NULLs (thanks to ary[knownLength]={};)
+	memcpy(copiedAry, nonDigitAry+1, originalAryLen);
+	return strndup(copiedAry,originalAryLen);	//Can't simply return copiedAry because its pointer is invalid after this function finishes execution
+	//strndup(stringToDuplicate, max#CharsToCopyFrom_stringToDuplicate)
 }
 
 
@@ -165,6 +170,7 @@ const char* b10_add(const char* base10num1_immutable, const char* base10num2_imm
 	//strlen("Hi!") == 3  because "Hi!" == 'H' 'i' '!' '\0' == length of 3 nonNULL chars
 	//If strlen() produces a humongous # (especially one that overflows into negative length), it very likely means that a NULL character was
 	//  forgotten and there luckily was at least one random NULL character in memory
+	//POSSIBLE SECURITY WEAKNESS - using strlen()
 	numDigitsInNum1 = strlen(base10num1_immutable);	//num1Len
 	numDigitsInNum2 = strlen(base10num2_immutable);	//num2Len
 
@@ -187,19 +193,20 @@ const char* b10_add(const char* base10num1_immutable, const char* base10num2_imm
 	}
 
 	//Duplicate the passed-in string data into new char array. I think num1 and num2 will need to be freed, but I'm uncertain. FIXME (verify)
-    /* char* */num1 = strdup(base10num1_immutable);
-    /* char* */num2 = strdup(base10num2_immutable);
+    /* char* */num1 = strndup(base10num1_immutable, numDigitsInNum1);
+    /* char* */num2 = strndup(base10num2_immutable, numDigitsInNum2);
 
 	//lengthOfResultArray = maxSizeOf(num1,num2) + 1
 	int numDigitsInSumResult = numDigitsInNum2;
 	if(numDigitsInNum1 > numDigitsInNum2)
 		{numDigitsInSumResult = numDigitsInNum1;}
 	const int resultArrayLength = numDigitsInSumResult + 1;	//+1 for sumPlaceholder
-	char addingAry[resultArrayLength];	//Allocate memory to array at compile-time without modifying array's likely-random data.
+	char addingAry[resultArrayLength] = {};	//Allocate memory to array at compile-time without modifying array's likely-random data.
 	
 	//Set every element of resultArray to NULL characters ('\0') so no accidental #s pop up randomly
-	for(i=0; i<resultArrayLength; i++)
-	{addingAry[i] = '\0';}
+	//COMMENTED CODE IMMEDIATELY BELOW IS UNNECESSARY BECAUSE THE ABOVE LINE OF CODE SETS NEWLY ALLOCATED ARRAY TO ALL NULLS - `array[knownLength] = {};`
+	//for(i=0; i<resultArrayLength; i++)
+	//{addingAry[i] = '\0';}
 	
 	//Convert the chars to easily understandable #s that support arithmetic
 	for(i=0; i<numDigitsInNum1; i++)
@@ -228,7 +235,7 @@ const char* b10_add(const char* base10num1_immutable, const char* base10num2_imm
 
 	//Start at far right end of all #s (LSD), work toward the left until reaching second-greatest place value, using results array (addingAry) for carry digits
 	//Shorter names for readability. "inx" == "index"
-	//-1 to not illegally access outside the max array index (done here instead of having to write "index-1" a billion times in the below while() block)
+	//-1 to not illegally access outside the max array index (done here instead of having to write "index-1" a billion times in the below while() block, which I did originally)
 	inxResult = resultArrayLength - 1;
 	inxNum1   = numDigitsInNum1 - 1;
 	inxNum2   = numDigitsInNum2 - 1;
@@ -258,7 +265,7 @@ const char* b10_add(const char* base10num1_immutable, const char* base10num2_imm
 
 		if(addingAry[inxResult] > 9  &&  inxResult>0)	//if(currentValue takesTwoDigitsToRepresentInBase10 AND nextHigherPlaceValue_InResultsArray_Exists)
 		{
-			//printf("addingAry[inxResult] == %d  >  9. inxResult == %d\n", addingAry[inxResult], inxResult);
+			//printf("addingAry[inxResult] == %d  >  9. inxResult == %d\n", addingAry[inxResult], inxResult);	//DEBUG
 			addingAry[inxResult] -= 10;	//Subtract 10 from current-place-value's value (e.g. val15->val5)
 			addingAry[inxResult-1]++;	//Increment next-higher-place-value's ([i-1]) value (e.g. val3->val4)(++) in resultsArray
 		}
@@ -271,43 +278,171 @@ const char* b10_add(const char* base10num1_immutable, const char* base10num2_imm
 
 
 	//PRINT
-	print_decimalRepresented_CharArrayWithoutLeadingZeroes(addingAry, resultArrayLength);
+	if(DEBUG){	print_decimalRepresented_CharArrayWithoutLeadingZeroes(addingAry, resultArrayLength);}
+	//return convertDigitsInCharArrayToString(addingAry, resultArrayLength);
 
-	
+	//CONVERT: ARRAY OF DIGITS -> ARRAY OF CHARS -> STRING -> SHIFT ARRAY TO LEFT BY ONE IF FIRST DIGITS ARE '0'
+	const char* str = convertDigitsInCharArrayToString((char*)addingAry, resultArrayLength);
+	if(DEBUG)
+	{
+		printf("aryLen: %d\nprintDigitArray(additionResultArray): ", resultArrayLength);
+		printDigitArray(addingAry,resultArrayLength);
+		printf("printCharArray(charArrayToString): ");
+		printCharArray(str,resultArrayLength);
+	}
 
-	return convertDigitsInCharArrayToString(addingAry, resultArrayLength);
+	if(addingAry[0] == 0)//not '0' because 0==NULL!='0'
+	{
+		const char* fixedStr = removeMSDfromCharArray_aryShiftLeft((char*)str, resultArrayLength);
+		/*printf("printCharArray(shiftedString): ");
+		printCharArray(fixedStr,resultArrayLength-1);*/		//Different way of doing the same thing as the line below
+		if(DEBUG){	printf("printf(shiftedString): %s\n", fixedStr);}
+		
+		return strdup(fixedStr);	//Needs to be freed after function returns. FIXME (be aware of it)
+	}
+	return strdup(str);	//Needs to be freed after function returns. FIXME (be aware of it)
 }
 
 
 
+
+//DISCLAIMER: If you see a number followed by a letter (e.g. someVar_3a), that's because I was too lazy to rename every single testing variable.
 void testConversion()
 {
 	printf("\n\nCommence conversion test...\n");
 
-	char digAry0[] = {1,2,3,4,5,6,7,8,9,10};
-	char len0 = 10;
-	const char *tempAry = removeMSDfromCharArray_aryShiftLeft(digAry0, len0);
-	printf("Original Array's address: %p\nReturned Array's address: %p\n", digAry0, tempAry);
-	printf("Original Array after removeMSDfromCharArray_aryShiftLeft( {1,2,3,4,5,6,7,8,9,10} ): ");
+	printf("SHOULD WORK\n");
+	char digAry0[] = {0,1,2,3,4,5,0,6,7,8,9};
+	char len0 = 11;
+	printf("Original Digit Array before convertDigitsInCharArrayToString(): ");
 	printDigitArray(digAry0, len0);
-	printf("Returned Array from  removeMSDfromCharArray_aryShiftLeft( {1,2,3,4,5,6,7,8,9,10} ): ");
-	printDigitArray(tempAry, len0);
+
+	const char *strFromDigAry = convertDigitsInCharArrayToString(digAry0, len0);
+	printf("Original Digit Array's address: %p\nReturned Digit Array's address: %p\n", digAry0, strFromDigAry);	//%p = interpret as pointer (hex memory address)
+	printf("Original Digit Array after convertDigitsInCharArrayToString( {0,1,2,3,4,5,0,6,7,8,9} ): ");
+	printDigitArray(digAry0, len0);
+	printf("Returned Digit Array from  convertDigitsInCharArrayToString( {0,1,2,3,4,5,0,6,7,8,9} ): ");
+	printCharArray(strFromDigAry, len0);
 	printf("\n\n");
 
 
-	char digAry1[] = {0,1,2,3,4,5,6,7,8,9};
-	fprintf(stderr, "Legal 0-9: %s\n", convertDigitsInCharArrayToString(digAry1, 10) );
+	printf("SHOULD WORK\n");
+	char charAry0[] = {'1','2','3','4','5','0','6','7','8','9','a','b','c','f','g','z','A','B','C','F','G','Z'};
+	char len1 = 22;
+	printf("Original Char Array before removeMSDfromCharArray_aryShiftLeft(): ");
+	printCharArray(charAry0, len1);
 
+	const char *postShiftCharAry = removeMSDfromCharArray_aryShiftLeft(charAry0, len1);
+	printf("Original Char Array's address: %p\nReturned Array's address: %p\n", charAry0, postShiftCharAry);	//%p = interpret as pointer (hex memory address)
+	printf("Original Char Array after removeMSDfromCharArray_aryShiftLeft( {1,2,3,4,5,0,6,7,8,9,a,b,c,f,g,z,A,B,C,F,G,Z} ): ");
+	printCharArray(charAry0, len1);
+	printf("Returned Char Array from  removeMSDfromCharArray_aryShiftLeft( {1,2,3,4,5,0,6,7,8,9,a,b,c,f,g,z,A,B,C,F,G,Z} ): ");
+	printCharArray(postShiftCharAry, len1);
+	printf("\n\n");
+
+
+
+    printf("SHOULD CRASH ENTIRE PROGRAM\n");
 	char digAry2[] = {2,3,4,5, 10,11,12};
 	fprintf(stderr, "Illegal 10-12: {2,3,4,5, 10,11,12} -> {%s}\n", convertDigitsInCharArrayToString(digAry2, 7) );
-	//Should crash before printing this
+	//Should crash before printing any of this
 
 	//Stuff after this line (within this testing block) shouldn't be reached (unless you comment some stuff out)
+    printf("SHOULD CRASH ENTIRE PROGRAM\n");
 	char digAry3[] = {2,3,4,5, -1};
 	fprintf(stderr, "Illegal -1: {2,3,4,5, -1} -> {%s}\n", convertDigitsInCharArrayToString(digAry2, 5) );
-	//Should crash before printing this
+	//Should crash before printing any of this
 
 	printf("\nEnd conversion test...\n\n");
+}
+void testBase10Add()
+{
+	printf("\n\nCommence Base10 Addition test...\n");
+
+	//DUPLICATE ENTRIES
+	const char* num1_immutable_0 =   "12345";	//[0][1][2][3][4]'\0'		//strlen("12345")==5
+	const char* num2_immutable_0 =   "12345";
+
+    //add(const char* num1_immutable, const char* num2_immutable)
+    printf("TEST0   b10_add(\"%s\",\"%s\"): %6s\n",    num1_immutable_0, num2_immutable_0,   b10_add(num1_immutable_0, num2_immutable_0));
+
+
+	//SAME LENGTH, USER'S LEADING DIGIT IS NOT 0, MSD SHOULD BE 1
+	const char* num1_immutable_1 =   "62345";	//[0][1][2][3][4]'\0'		//strlen("62345")==5
+	const char* num2_immutable_1 =   "72345";
+	printf("TEST1   b10_add(\"%s\",\"%s\"): %6s\n",    num1_immutable_1, num2_immutable_1,   b10_add(num1_immutable_1, num2_immutable_1));
+
+
+	//SAME LENGTH, USER PUT A LEADING 0 FOR SOME REASON
+	const char* num1_immutable_2 =   "12345";	//[0][1][2][3][4]'\0'		//strlen("12345")==5
+	const char* num2_immutable_2 =   "02345";	//[0][1][2][3][4]'\0'		//strlen("02345")==5
+	printf("TEST2   b10_add(\"%s\",\"%s\"): %6s\n",    num1_immutable_2, num2_immutable_2,   b10_add(num1_immutable_2, num2_immutable_2));
+
+
+	//SAME LENGTH, USER PUT A LEADING 0 IN BOTH ADDENDS FOR SOME REASON
+	const char* num1_immutable_3 =   "03456";	//[0][1][2][3][4]'\0'		//strlen("03456")==5
+	const char* num2_immutable_3 =   "02345";
+	printf("TEST3   b10_add(\"%s\",\"%s\"): %6s\n",    num1_immutable_3, num2_immutable_3,   b10_add(num1_immutable_3, num2_immutable_3));
+
+
+	//SAME LENGTH, USER PUT A LEADING 0 IN BOTH ADDENDS FOR SOME REASON, MSD SHOULD BE 1
+	const char* num1_immutable_3a =   "09345";	//[0][1][2][3][4]'\0'		//strlen("09345")==5
+	const char* num2_immutable_3a =   "09345";
+	printf("TEST3a  b10_add(\"%s\",\"%s\"): %6s\n",    num1_immutable_3a, num2_immutable_3a,   b10_add(num1_immutable_3a, num2_immutable_3a));
+
+
+	//SAME LENGTH, USER PUT TWO LEADING 0s IN ONE ADDEND FOR SOME REASON
+	const char* num1_immutable_3b =   "12345";	//[0][1][2][3][4]'\0'		//strlen("12345")==5
+	const char* num2_immutable_3b =   "00345";	//[0][1][2][3][4]'\0'		//strlen("00345")==5
+	printf("TEST3b  b10_add(\"%s\",\"%s\"): %6s\n",    num1_immutable_3b, num2_immutable_3b,   b10_add(num1_immutable_3b, num2_immutable_3b));
+
+
+
+	//ONE ADDEND IS ONE DIGIT SHORTER
+	const char* num1_immutable_4 =   "12345";	//[0][1][2][3][4]'\0'	//strlen("12345")==5
+	const char* num2_immutable_4 =   "2345";	//[0][1][2][3]'\0'		//strlen("2345")==4
+	printf("TEST4   b10_add(\"%s\", \"%s\"): %6s\n",    num1_immutable_4, num2_immutable_4,   b10_add(num1_immutable_4, num2_immutable_4));
+
+
+	//BOTH ADDENDS ARE EXACTLY FOUR USER-INPUT 0s
+	const char* num1_immutable_5 =   "0000";	//[0][1][2][3]'\0'		//strlen("0000")==4
+	const char* num2_immutable_5 =   "0000";	//[0][1][2][3]'\0'		//strlen("0000")==4
+	printf("TEST5   b10_add( \"%s\", \"%s\"): %6s\n",   num1_immutable_5, num2_immutable_5,   b10_add(num1_immutable_5, num2_immutable_5));
+
+
+	//BOTH ADDENDS ARE AT LEAST FOUR USER-INPUT 0s
+	const char* num1_immutable_5a =   "0000";	//[0][1][2][3]'\0'		//strlen("0000")==4
+	const char* num2_immutable_5a =   "00000";	//[0][1][2][3][4]'\0'	//strlen("00000")==5
+	printf("TEST5a  b10_add( \"%s\",\"%s\"): %6s\n",   num1_immutable_5a, num2_immutable_5a,   b10_add(num1_immutable_5a, num2_immutable_5a));
+
+
+	//BOTH ADDENDS ARE 0
+	const char* num1_immutable_6 =   "0";		//[0]'\0'				//strlen("0")==1
+	const char* num2_immutable_6 =   "0";		//[0]'\0'				//strlen("0")==1
+	printf("TEST6   b10_add(    \"%s\",    \"%s\"): %6s\n", num1_immutable_6, num2_immutable_6, b10_add(num1_immutable_6, num2_immutable_6));
+
+
+	//ONE ADDEND IS 0
+	const char* num1_immutable_7 =   "12345";	//[0][1][2][3][4]'\0'	//strlen("12345")==5
+	const char* num2_immutable_7 =   "0";		//[0]'\0'				//strlen("0")==1
+	printf("TEST7   b10_add(\"%s\",    \"%s\"): %6s\n",   num1_immutable_7, num2_immutable_7,  b10_add(num1_immutable_7, num2_immutable_7));
+
+
+	//ONE ADDEND IS ONLY NULL CHAR
+	const char* num1_immutable_8 =   "12345";	//[0][1][2][3][4]'\0'		//strlen("12345")==5
+	const char* num2_immutable_8 =   "";		//'\0'						//strlen("")==0
+	printf("TEST8   b10_add(\"%s\",     \"%s\"): %6s\n",   num1_immutable_8, num2_immutable_8,  b10_add(num1_immutable_8, num2_immutable_8));
+
+
+	//BOTH ADDENDS ARE ONLY NULL CHAR
+	const char* num1_immutable_9 =   "";	//'\0'		//strlen("")==0
+	//const char* num2_immutable = "456";//[0][1][2]'\0'	//strlen("456")==3
+	//const char* num2_immutable =   "12345000123450001234500012345";
+	const char* num2_immutable_9 =   "";	//'\0'		//strlen("")==0
+	printf("TEST9   b10_add(     \"%s\",     \"%s\"): %6s\n",  num1_immutable_9, num2_immutable_9, b10_add(num1_immutable_9, num2_immutable_9));
+	//printf("TEST  b10_add(\"%s\",\"%s\"): %6s\n",    num1_immutable_, num2_immutable_,   b10_add(num1_immutable_, num2_immutable_));
+
+	printf("\nEnd Base10 Addition test.\n\n");
 }
 
 
@@ -316,16 +451,7 @@ void testConversion()
 
 int main()
 {
-	const char* num1_immutable =   "12345";//[0][1][2][3][4]'\0'		//strlen("12345")==5
-	//const char* num2_immutable = "456";//[0][1][2]'\0'	//strlen("456")==3
-	const char* num2_immutable =   "12345000123450001234500012345";
-
-	const int numDigitsInNum1 = strlen(num1_immutable);
-	const int numDigitsInNum2 = strlen(num2_immutable);
-
-    //add(const char* num1_immutable, const char* num2_immutable)
-    printf("Result: %s\n", b10_add(num1_immutable, num2_immutable));
-
+	testBase10Add();
 	testConversion();
 
     return 0;
