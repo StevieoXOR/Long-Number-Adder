@@ -7,7 +7,8 @@
 #define ERR_LENGTH 2
 #define ERR_NON_DIGIT 3
 
-//ADDS TWO POSITIVE (including zero) LARGE-VALUED BASE10 NUMBERS
+//ADDS TWO POSITIVE (including zero) LARGE-VALUED WHOLE BASE10 NUMBERS
+//Whole meaning no decimal point
 
 
 //PREREQUISITE KNOWLEDGE:
@@ -19,10 +20,14 @@
 //  int unnecessarily uses more bits to store a value in the same range that char can handle
 //Speeds (unit=time):  Writing to storage/disk(cache blocks of #s)(longest time) >> Writing to memory(cache blocks of #s) > Division (2 #s) > Multiplication (2 #s) > Addition (2 #s) > Shifting (1 #)(shortest time)
 //  Note: Shifting a single # is different from shifting an entire array.
-//strdup() allocates memory but does NOT free it. When used, strdup() should either be free()d or only be used when creating known-length arrays at compile-time
+//strdup() allocates memory (on the heap) but does NOT free it. When used, strdup() should either be free()d or only be used when creating known-length arrays at compile-time
 //  I.e., Don't do `char* ary2 = strdup(ary);` without using free(),
 //    but `char ary2[501] = strdup(ary);` should be fine (if ary has 500 or fewer elements and ary is NULL-terminated) without doing `free(ary2)`
+//  strdup() copies chars from an array or string until it reaches a NULL char. You better make sure your array has a NULL in it, or else it will read past
+//    what it is allowed to read.
+//strndup() is the same as strdup(), but only copies the specified # of characters
 //strlen() adds 1 to a counter for every nonNULL character. Once a NULL character is hit, the counter's value is NOT incremented, and the counter's value is returned.
+//  tl;dr strlen() counts and returns the # of nonNULL chars.
 
 
 
@@ -74,7 +79,7 @@ void print_decimalRepresented_CharArrayWithoutLeadingZeroes(char* ary, int aryLe
 	{
 		char currDigit = ary[i];	//char because it only needs to represent values 0 through 9. char can represent 0 through 127 (maybe 255?)
 		//if(prevMostSignificantDigitsAreZero && currDigit==0)	//e.g. [0]01023 or 0[0]1023
-		//{prevMostSignificantDigitsAreZero = 1;}	//boolVar = true;	//This doesn't change anything, so these lines are unnecessary, except to show the human the logic more clearly
+		//{prevMostSignificantDigitsAreZero = 1;}	//boolVar = true;	//This doesn't change anything, so these two lines are unnecessary, except to show the human the logic more clearly
 		if( prevMostSignificantDigitsAreZero && currDigit!=0)	//if(isFirstNonzeroDigit)				//e.g. 00[1]023
 		{
 			printf("%d", currDigit);
@@ -118,8 +123,11 @@ const char* removeMSDfromCharArray_aryShiftLeft(char* nonDigitAry, const int ori
 
 //Adding 999,999,999,999,999 and 111,111,111,111,111 (each # is 15 decimal digits)
 //Array (char):  (LSD)9,1, 9,1, 9,1,  9,1, 9,1, 9,1,    9,1, 9,1, 9,1,      9,1, 9,1, 9,1,  9,1, 9,1, 9,1,  sumPlaceholder(MSD)
+//  Plan (the line above): Use the memory space of the two input #s for interweaving the addends (arranged by place value)
 //  LSD = Least Significant Digit, MSD = Most Significant Digit
 //  Actually, addition is way faster than copying #s to arrays, so I'll leave the two strings as they are to minimize the # of array modifications
+//  I've decided to not make a "third" array where the #s are interweaved because I'd have to do a lot of extra writing to memory that can't be optimized with memcpy()
+//    due to writing every other char instead of writing sequential chars
 //*****Shifting is faster than addition, so I should use shifting (instead of addition) where I can too. I can have three separate mutable arrays,
 //*****    start at the LSD's index in all 3 arrays,
 //*****    add the values then store at the same index in the results array (and increment the next index of one of the addends if addedResult>9),
